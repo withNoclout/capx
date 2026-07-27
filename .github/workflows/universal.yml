@@ -36,7 +36,7 @@ jobs:
         run: ditto -c -k --keepParent dist/CapX.app dist/CapX-ci-universal.zip
 
       - name: Upload universal app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CapX-ci-universal
           path: dist/CapX-ci-universal.zip
