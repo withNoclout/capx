@@ -1,0 +1,29 @@
+.DS_Store
+
+# Swift build products
+.build/
+DerivedData/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+.swiftpm/xcode/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# Packaged applications and release artifacts
+dist/
+*.app
+*.dmg
+*.zip
+*.dSYM
+
+# Signing and notarization credentials
+*.cer
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+.env
+.env.*
+
+# Local tooling
+.serena/

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/withNoclout/capx/security/advisories/new
+    about: Report security issues privately; do not open a public issue.
+  - name: Questions and ideas
+    url: https://github.com/withNoclout/capx/discussions
+    about: Ask usage questions or discuss ideas that are not ready for an issue.

@@ -1,0 +1,65 @@
+name: Feature request
+description: Propose a focused improvement to CapX
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CapX stays intentionally small, native, and local-only. Explain the user problem before proposing an implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What screenshot workflow is difficult today, and who encounters it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible interaction and its boundaries.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing CapX actions or macOS features that are close but insufficient.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: data-impact
+    attributes:
+      label: Data and network impact
+      description: CapX does not upload screenshots or include application networking.
+      options:
+        - No new data access or network activity
+        - Changes local file access
+        - Would require network activity
+        - Unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and permissions
+      description: List any new macOS permission, folder access, persistence, clipboard behavior, or external service.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and discussions for this request.
+          required: true
+        - label: This request preserves original screenshot files and uses public macOS APIs.
+          required: true

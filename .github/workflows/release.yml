@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Sign, notarize, and publish
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: release
+
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@v4
+
+      - name: Validate version tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PLIST_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [[ "$GITHUB_REF_NAME" != "v$PLIST_VERSION" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Info.plist version $PLIST_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.RELEASE_KEYCHAIN_PASSWORD }}
+        run: |
+          : "${CERTIFICATE_BASE64:?missing DEVELOPER_ID_CERTIFICATE_BASE64}"
+          : "${CERTIFICATE_PASSWORD:?missing DEVELOPER_ID_CERTIFICATE_PASSWORD}"
+          : "${KEYCHAIN_PASSWORD:?missing RELEASE_KEYCHAIN_PASSWORD}"
+
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/capx-release.keychain-db"
+          printf '%s' "$CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+
+          /usr/bin/security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          /usr/bin/security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          /usr/bin/security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          /usr/bin/security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          /usr/bin/security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          /usr/bin/security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY="$(/usr/bin/security find-identity -v -p codesigning "$KEYCHAIN_PATH" | /usr/bin/awk -F '"' '/Developer ID Application/ { print $2; exit }')"
+          if [[ -z "$SIGNING_IDENTITY" ]]; then
+            echo "Developer ID Application identity not found" >&2
+            exit 1
+          fi
+
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "RELEASE_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "RELEASE_CERTIFICATE_PATH=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
+
+      - name: Prepare App Store Connect API key
+        shell: bash
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          : "${API_KEY_BASE64:?missing APP_STORE_CONNECT_PRIVATE_KEY_BASE64}"
+          : "${API_KEY_ID:?missing APP_STORE_CONNECT_KEY_ID}"
+          : "${API_ISSUER_ID:?missing APP_STORE_CONNECT_ISSUER_ID}"
+
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
+          printf '%s' "$API_KEY_BASE64" | /usr/bin/base64 -D > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+
+          echo "NOTARYTOOL_KEY_ID=$API_KEY_ID" >> "$GITHUB_ENV"
+          echo "NOTARYTOOL_ISSUER_ID=$API_ISSUER_ID" >> "$GITHUB_ENV"
+          echo "NOTARYTOOL_KEY_FILE=$API_KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and staple
+        run: ./Scripts/release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ARCHIVE="dist/CapX-${VERSION}-universal.zip"
+          CHECKSUM="${ARCHIVE}.sha256"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ARCHIVE" "$CHECKSUM" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$ARCHIVE" \
+              "$CHECKSUM" \
+              --verify-tag \
+              --generate-notes \
+              --title "CapX $VERSION"
+          fi
+
+      - name: Remove temporary credentials
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${RELEASE_KEYCHAIN_PATH:-}" ]]; then
+            /usr/bin/security delete-keychain "$RELEASE_KEYCHAIN_PATH" || true
+          fi
+          rm -f "${RELEASE_CERTIFICATE_PATH:-}" "${NOTARYTOOL_KEY_FILE:-}"

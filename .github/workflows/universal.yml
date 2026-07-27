@@ -1,0 +1,44 @@
+name: Universal app
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: universal-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  universal:
+    name: Build arm64 and x86_64 app
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build universal app
+        run: ./Scripts/build-universal-app.sh release
+
+      - name: Verify architectures and signature
+        run: |
+          lipo dist/CapX.app/Contents/MacOS/capx -verify_arch arm64 x86_64
+          codesign --verify --deep --strict dist/CapX.app
+
+      - name: Archive CI artifact
+        run: ditto -c -k --keepParent dist/CapX.app dist/CapX-ci-universal.zip
+
+      - name: Upload universal app
+        uses: actions/upload-artifact@v4
+        with:
+          name: CapX-ci-universal
+          path: dist/CapX-ci-universal.zip
+          if-no-files-found: error
+          retention-days: 7
