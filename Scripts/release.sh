@@ -16,7 +16,9 @@ if [[ "$VERSION" != "$PLIST_VERSION" ]]; then
   exit 65
 fi
 
-if [[ -z "${SIGNING_IDENTITY:-}" || "$SIGNING_IDENTITY" == "-" ]]; then
+if [[ -z "${SIGNING_IDENTITY:-}" ||
+      "$SIGNING_IDENTITY" == "-" ||
+      "$SIGNING_IDENTITY" != "Developer ID Application:"* ]]; then
   echo "SIGNING_IDENTITY must name a Developer ID Application certificate" >&2
   exit 66
 fi
